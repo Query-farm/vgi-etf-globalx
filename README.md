@@ -60,6 +60,30 @@ ATTACH 'globalx' AS globalx (TYPE vgi, LOCATION '/path/to/vgi-etf-globalx/bin/vg
 
 `bin/vgi-etf-globalx-worker` is a small wrapper that launches `src/worker.ts` under Bun.
 
+### Option C — container image (ghcr.io)
+
+A multi-arch (linux/amd64 + linux/arm64), cosign-signed image is published to
+`ghcr.io/query-farm/vgi-etf-globalx` on every release — no local Bun or worker binary needed.
+Attach it directly over the VGI container transport:
+
+```sql
+LOAD vgi;
+ATTACH 'globalx' AS globalx (TYPE vgi, LOCATION 'oci://ghcr.io/query-farm/vgi-etf-globalx:latest');
+```
+
+Or run the HTTP transport yourself and attach that:
+
+```bash
+docker run --rm -p 8000:8000 ghcr.io/query-farm/vgi-etf-globalx:latest   # serves /health + the VGI RPC on :8000
+```
+
+```sql
+LOAD vgi;
+ATTACH 'globalx' AS globalx (TYPE vgi, LOCATION 'http://localhost:8000');
+```
+
+`:latest` always tracks the newest release.
+
 ## Usage
 
 ### products — the fund catalog (a base table)
