@@ -1,0 +1,90 @@
+{
+  "6e90e7df754743ce": {
+    "name": "qyld_expense_ratio",
+    "outcome": "pass",
+    "reason": "check_sql asserted true",
+    "friction": [],
+    "queries": 1,
+    "grader": "check_sql",
+    "path": {
+      "discovery_calls": 1,
+      "queries": 1,
+      "bind_errors": 0,
+      "requirement_errors": 0,
+      "runtime_errors": 0,
+      "blocked": 0,
+      "redundant_describes": 0,
+      "not_found": 0,
+      "hit_ceiling": false,
+      "score": 100
+    },
+    "suggestions": [],
+    "attempts_used": 1
+  },
+  "09f7c1d486a12f20": {
+    "name": "qyld_exists",
+    "outcome": "pass",
+    "reason": "check_sql asserted true",
+    "friction": [],
+    "queries": 1,
+    "grader": "check_sql",
+    "path": {
+      "discovery_calls": 1,
+      "queries": 1,
+      "bind_errors": 0,
+      "requirement_errors": 0,
+      "runtime_errors": 0,
+      "blocked": 0,
+      "redundant_describes": 0,
+      "not_found": 0,
+      "hit_ceiling": false,
+      "score": 100
+    },
+    "suggestions": [],
+    "attempts_used": 1
+  },
+  "c81593147d435e0f": {
+    "name": "qyld_top_holding",
+    "outcome": "pass",
+    "reason": "check_sql asserted true",
+    "friction": [],
+    "queries": 1,
+    "grader": "check_sql",
+    "path": {
+      "discovery_calls": 1,
+      "queries": 1,
+      "bind_errors": 0,
+      "requirement_errors": 0,
+      "runtime_errors": 0,
+      "blocked": 0,
+      "redundant_describes": 0,
+      "not_found": 0,
+      "hit_ceiling": false,
+      "score": 100
+    },
+    "suggestions": [],
+    "attempts_used": 1
+  },
+  "cba10276c4b15367": {
+    "name": "qyld_holdings_scan",
+    "outcome": "pass",
+    "reason": "check_sql asserted true",
+    "friction": [],
+    "queries": 1,
+    "grader": "check_sql",
+    "path": {
+      "discovery_calls": 2,
+      "queries": 1,
+      "bind_errors": 0,
+      "requirement_errors": 0,
+      "runtime_errors": 0,
+      "blocked": 0,
+      "redundant_describes": 0,
+      "not_found": 0,
+      "hit_ceiling": false,
+      "score": 100
+    },
+    "suggestions": [],
+    "attempts_used": 1
+  }
+}

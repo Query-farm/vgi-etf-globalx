@@ -77,8 +77,8 @@ const HOLDINGS_COLUMN_COMMENTS: Record<string, string> = {
   as_of_date: "Holdings as-of date (the published file's own date; current holdings only).",
   weight_percent: "Percent of the fund's net assets, in percent points (0.74 = 0.74%; weights sum to ~100).",
   ticker: "Constituent ticker (may carry an exchange suffix like '6104 JP'; blank for cash/derivative lines).",
-  name: "Constituent / issue name.",
-  sedol: "Constituent SEDOL identifier.",
+  name: "Constituent / issue name. Part of the (fund_ticker, name, sedol) primary key; never blank.",
+  sedol: "Constituent SEDOL identifier; empty string for cash/derivative lines that carry none. Part of the (fund_ticker, name, sedol) primary key.",
   market_price: "Market price per unit of the constituent, in USD.",
   shares_held: "Number of shares / units held.",
   market_value: "Market value of the position, in USD.",
@@ -191,9 +191,9 @@ const CATALOG_TAGS: Record<string, string> = {
     },
     {
       name: "qyld_holdings_scan",
-      prompt: "Using the holdings backing scan, list a few QYLD constituents by weight.",
-      check_sql: "SELECT count(*) > 0 FROM globalx.main.holdings_scan() WHERE fund_ticker = 'QYLD'",
-      success_criteria: "The answer returns QYLD constituents via holdings_scan() filtered by fund_ticker.",
+      prompt: "Using the holdings backing scan function with the fund ticker as its argument, list a few QYLD constituents by weight.",
+      check_sql: "SELECT count(*) > 0 FROM globalx.main.holdings_scan(fund_ticker => 'QYLD')",
+      success_criteria: "The answer returns QYLD constituents via holdings_scan(fund_ticker => 'QYLD'), passing the fund ticker as the argument.",
     },
   ]),
 };
@@ -271,8 +271,14 @@ export function makeCatalog(
             name: "holdings",
             function: holdingsScan,
             arguments: new Arguments([], new Map()),
-            // fund_ticker is always populated (the scan tags every row with its fund).
-            notNull: ["fund_ticker"],
+            // A holding row is identified by its fund + constituent: (fund_ticker, name, sedol) is a
+            // NOT-NULL composite primary key, verified unique across every fund's current holdings.
+            // A constituent's SEDOL alone is not unique within a fund (a preferred issuer can hold two
+            // series under one name/ticker with distinct SEDOLs), and cash/derivative lines carry no
+            // SEDOL (emitted as '') — so name is part of the key too. The scan emits '' (never NULL)
+            // for a blank name/sedol so the key columns are genuinely non-null.
+            notNull: ["fund_ticker", "name", "sedol"],
+            primaryKey: [["fund_ticker", "name", "sedol"]],
             // Hive partition key: fund_ticker. A WHERE fund_ticker = … / IN (…) filter is pushed
             // down to fetch just those funds; an unfiltered scan streams every fund (all partitions).
             // Global X publishes current holdings only, so there is NO time travel.

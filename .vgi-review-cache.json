@@ -1,0 +1,80 @@
+{
+  "3149b6d7ed2a2683": {
+    "object": "globalx",
+    "kind": "catalog",
+    "scores": {
+      "accuracy": 5,
+      "clarity": 5,
+      "completeness": 4,
+      "audience_fit": 5
+    },
+    "suggestions": [
+      "State the lineup size (~116 funds) and that the catalog is refreshed from a page cached for 24 h, so an agent knows both the scan cost and the staleness bound.",
+      "Name the two tables' join key explicitly at catalog level (`products.ticker` = `holdings.fund_ticker`), since the two columns have different names and an agent reading only the catalog doc will guess `ticker` = `ticker`.",
+      "Add the coverage boundary that is invisible from the structure: US-listed Global X ETFs only, no NAV history, no historical holdings, no ISIN/CUSIP."
+    ],
+    "summary": "Accurate, well-pitched catalog framing; only misses scale, staleness, and the differently-named join key."
+  },
+  "d7fc4d95d49c2ac1": {
+    "object": "globalx.main",
+    "kind": "schema",
+    "scores": {
+      "accuracy": 5,
+      "clarity": 5,
+      "completeness": 3,
+      "audience_fit": 4
+    },
+    "suggestions": [
+      "The schema doc is nearly a restatement of the catalog doc \u2014 differentiate it by naming the objects' relationship concretely (one row per fund in `products`; many rows per fund in `holdings`, joined `products.ticker = holdings.fund_ticker`).",
+      "Mention that `holdings` is hive-partitioned and that an unfiltered scan fans out over every fund, since that is the single biggest cost decision an agent makes at this level.",
+      "Say that some funds have no published holdings file and are silently absent from `holdings`, so a `products` ticker is not guaranteed to have holdings rows."
+    ],
+    "summary": "Clear and accurate but largely duplicates the catalog doc without adding the join, partitioning, or coverage facts an agent needs here."
+  },
+  "ee8eb2ea7c28c51b": {
+    "object": "globalx.main.holdings",
+    "kind": "table",
+    "scores": {
+      "accuracy": 4,
+      "clarity": 5,
+      "completeness": 4,
+      "audience_fit": 5
+    },
+    "suggestions": [
+      "\"Rows come back weight-descending\" in doc_llm overstates the contract \u2014 the scan emits weight-descending per partition, but SQL gives no ordering guarantee across partitions or after any operator. Reword to \"rows are emitted weight-descending within each fund; add ORDER BY weight_percent DESC if you depend on it\" (the examples already do)."
+    ],
+    "summary": "Strong, agent-oriented docs; the implied ordering guarantee and the unmentioned composite primary key are the two gaps."
+  },
+  "7494bf5bb8f74a7b": {
+    "object": "globalx.main.products",
+    "kind": "table",
+    "scores": {
+      "accuracy": 4,
+      "clarity": 5,
+      "completeness": 4,
+      "audience_fit": 5
+    },
+    "suggestions": [
+      "`net_expense_ratio_percent`'s comment says \"null when equal to gross\", but the driver nulls it whenever the source field is absent (`$undefined`) \u2014 which is not the same claim. Say \"null when Global X does not publish a separate net ratio (typically when it equals gross)\" so an agent does not COALESCE on a false invariant.",
+      "Note that the return columns are null for funds younger than the window (`return_10y_percent` is null for most of the lineup) and that they are as of `performance_as_of` (month-end), not `as_of_date` \u2014 the two date columns are easy to conflate.",
+      "State the row count (~116) and the advisory primary key `[ticker]`, and mention that Global X publishes no ISIN/CUSIP, so `ticker` is the only join key available."
+    ],
+    "summary": "Column-level units are exemplary; the net-expense null rule is subtly wrong and null-heavy return columns go unmentioned."
+  },
+  "e5b8115a961743bb": {
+    "object": "globalx.main.holdings_scan",
+    "kind": "table_function",
+    "scores": {
+      "accuracy": 5,
+      "clarity": 4,
+      "completeness": 3,
+      "audience_fit": 4
+    },
+    "suggestions": [
+      "The docs say \"prefer the `holdings` table\" but never say why the scan exists or when it is actually the right call \u2014 one clause (\"exposed because the extension needs a listed scan to discover filter pushdown; there is no query it answers that the table cannot\") would stop an agent from hunting for a hidden capability.",
+      "The scan repeats the `fund_ticker`/`ticker` distinction and the percent-points note but omits the output columns entirely \u2014 an agent choosing between scan and table cannot see they are the same nine columns. State that it returns the `holdings` table's schema.",
+      "Clarify precedence when both the argument and a pushed `WHERE fund_ticker` predicate are present (the code unions them); as written, an agent may assume the argument wins and write `holdings_scan(fund_ticker => 'QYLD') WHERE fund_ticker = 'COPX'` expecting an empty result."
+    ],
+    "summary": "Argument semantics are documented accurately, but the scan hides its column list and never justifies its own existence."
+  }
+}

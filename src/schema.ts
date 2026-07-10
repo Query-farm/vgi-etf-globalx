@@ -122,14 +122,19 @@ export function holdingsSchema(): Schema {
 }
 
 export function holdingsBatch(schema: Schema, rows: HoldingRow[]) {
+  // `name` and `sedol` are part of the holdings composite primary key
+  // (fund_ticker, name, sedol), so they must be non-null: coerce a blank/absent
+  // value to the empty string (cash & derivative lines carry no SEDOL). Verified
+  // unique across every fund's current holdings.
+  const orEmpty = (s: string | null): string => s ?? "";
   return batchFromColumns(
     {
       fund_ticker: rows.map((r) => r.fundTicker),
       as_of_date: rows.map((r) => dateOrNull(r.asOfDate)),
       weight_percent: rows.map((r) => r.weightPercent),
       ticker: rows.map((r) => r.ticker),
-      name: rows.map((r) => r.name),
-      sedol: rows.map((r) => r.sedol),
+      name: rows.map((r) => orEmpty(r.name)),
+      sedol: rows.map((r) => orEmpty(r.sedol)),
       market_price: rows.map((r) => r.marketPrice),
       shares_held: rows.map((r) => r.sharesHeld),
       market_value: rows.map((r) => r.marketValue),

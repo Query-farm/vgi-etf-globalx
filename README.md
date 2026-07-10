@@ -146,8 +146,10 @@ across fund types: `weight_percent`, `ticker`, `name`, `sedol`, `market_price`, 
 date — Global X publishes **current holdings only**, so there is no historical time travel. Join
 `holdings.fund_ticker` to `products.ticker` for fund-level facts.
 
-> A backing `holdings_scan()` function is also exposed (it's what the table scans, and it's what
-> lets DuckDB push the `fund_ticker` filter) — prefer the `holdings` table.
+> A backing `holdings_scan(fund_ticker => …)` table function is also exposed (it's what the table
+> scans, and it's what lets DuckDB push the `fund_ticker` filter). Call it directly for one fund —
+> `SELECT * FROM globalx.main.holdings_scan(fund_ticker => 'QYLD')` — or omit the argument to stream
+> every fund; either way, prefer the `holdings` table for normal queries.
 
 ## Development
 

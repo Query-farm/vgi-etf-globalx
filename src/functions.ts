@@ -30,8 +30,8 @@ const HOLDINGS_SCAN_DESCS: Record<string, string> = {
   as_of_date: "The holdings as-of date (the published file's own date).",
   weight_percent: "Percent of the fund's net assets, in percent points (0.74 = 0.74%).",
   ticker: "Constituent ticker (may carry an exchange suffix; blank for cash/derivative lines).",
-  name: "Constituent / issue name.",
-  sedol: "Constituent SEDOL.",
+  name: "Constituent / issue name (never blank; part of the row's identity).",
+  sedol: "Constituent SEDOL; empty string for cash/derivative lines that carry none.",
   market_price: "Market price per unit of the constituent, in USD.",
   shares_held: "Number of shares / units held.",
   market_value: "Market value of the position, in USD.",
@@ -118,16 +118,30 @@ export function makeProductsScan(client: GlobalxClient) {
 //   • process() pops one fund per tick, fetches its holdings, and emits a single partition batch.
 // filterPushdown + being LISTED is what lets DuckDB push fund_ticker into the scan.
 
+interface HoldingsScanArgs {
+  fund_ticker: string | null;
+}
+
 export function makeHoldingsScan(client: GlobalxClient) {
   const schema = holdingsSchema();
-  return defineTableFunction<Record<string, never>, Record<string, never>>({
+  return defineTableFunction<HoldingsScanArgs, Record<string, never>>({
     name: "holdings_scan",
     description:
-      "Backing scan for the holdings table — prefer the `holdings` table. Detailed fund " +
-      "holdings, hive-partitioned by fund_ticker: filter WHERE fund_ticker = 'QYLD' (or " +
-      "fund_ticker IN (…)) for specific funds, or scan with no filter to stream every fund's " +
-      "holdings. weight_percent is in percent points; Global X publishes current holdings only.",
-    args: {},
+      "Backing scan for the holdings table — prefer the `holdings` table. Returns detailed fund " +
+      "holdings, hive-partitioned by fund_ticker, weight-descending. Pass a single fund's ticker " +
+      "to scan just that fund, or call with no argument to stream every fund's holdings. " +
+      "weight_percent is in percent points; Global X publishes current holdings only.",
+    // A single optional selector argument. Its presence (an optional arg is still a declared
+    // parameter) makes this a genuine callable — `holdings_scan(fund_ticker => 'QYLD')` — not a bare zero-arg
+    // scan, and it composes with pushdown: the `holdings` table binds it with no argument and the
+    // extension pushes the fund_ticker WHERE filter in instead.
+    args: { fund_ticker: new Utf8() },
+    argDocs: {
+      fund_ticker:
+        "A Global X fund's exchange ticker to scan, e.g. QYLD. Case-insensitive. Omit (or pass " +
+        "NULL) to stream every fund's holdings.",
+    },
+    argDefaults: { fund_ticker: null },
     // filterPushdown MUST be declared AND this function MUST be listed in the catalog so the DuckDB
     // extension can discover the capability and push the fund_ticker filter into the scan. Each
     // fund is one SINGLE_VALUE partition (fund_ticker is the hive partition key).
@@ -136,8 +150,9 @@ export function makeHoldingsScan(client: GlobalxClient) {
     maxWorkers: DEFAULT_MAX_WORKERS,
     onBind: () => ({ outputSchema: schema }),
     // Seed the work queue (once, on the coordinator): one item per target fund, carrying the
-    // catalog as-of hint so process() can build the dated CSV URL directly.
-    onInit: async ({ initCall, executionId, storage }) => {
+    // catalog as-of hint so process() can build the dated CSV URL directly. Target funds come from
+    // the pushed fund_ticker filter and/or the fund_ticker argument; absent both, the whole catalog.
+    onInit: async ({ args, initCall, executionId, storage }) => {
       const joinKeys = buildJoinKeysLookup(initCall.join_keys);
       const filters = initCall.pushdown_filters
         ? deserializeFilters(initCall.pushdown_filters, joinKeys)
@@ -145,6 +160,10 @@ export function makeHoldingsScan(client: GlobalxClient) {
       const requested = new Set(
         (filters?.getColumnValues("fund_ticker") ?? []).map((t) => String(t).toUpperCase()),
       );
+      const argTicker = args.fund_ticker;
+      if (argTicker != null && String(argTicker).trim() !== "") {
+        requested.add(String(argTicker).trim().toUpperCase());
+      }
       // Resolve the fund universe (and each fund's as-of) from the (cached) catalog. One fetch.
       const products = await fetchProducts(client.get);
       const targets: FundItem[] = [];
@@ -177,23 +196,25 @@ export function makeHoldingsScan(client: GlobalxClient) {
       }
     },
     examples: [
-      { sql: "SELECT name, weight_percent FROM globalx.main.holdings_scan() WHERE fund_ticker = 'QYLD' ORDER BY weight_percent DESC LIMIT 10", description: "Top 10 holdings of QYLD via the backing scan" },
-      { sql: "SELECT fund_ticker, count(*) FROM globalx.main.holdings_scan() WHERE fund_ticker IN ('QYLD', 'COPX') GROUP BY fund_ticker", description: "Two partitions at once (fan-out)" },
+      { sql: "SELECT name, weight_percent FROM globalx.main.holdings_scan(fund_ticker => 'QYLD') ORDER BY weight_percent DESC LIMIT 10", description: "Top 10 holdings of QYLD, passing the fund ticker as the argument" },
+      { sql: "SELECT fund_ticker, count(*) FROM globalx.main.holdings_scan() WHERE fund_ticker IN ('QYLD', 'COPX') GROUP BY fund_ticker", description: "Two funds at once via a pushed IN filter on the no-argument scan" },
     ],
     tags: {
       "vgi.category": "holdings",
       "vgi.doc_llm":
         "The backing scan for the `holdings` table. Prefer querying the `holdings` table. " +
         "Hive-partitioned by fund_ticker (the fund's ticker, distinct from the constituent " +
-        "`ticker` column): filter WHERE fund_ticker = '…' (or fund_ticker IN (…)) for specific " +
-        "funds, or scan with no filter to stream every fund (~116 partitions — slow). " +
-        "weight_percent is in percent points (0.74 = 0.74%). Global X publishes current holdings " +
-        "only, so there is no historical as-of date.",
+        "`ticker` column). Pass a single fund's ticker — holdings_scan(fund_ticker => 'QYLD') — to scan just that " +
+        "fund, or call it with no argument and filter with a pushed WHERE fund_ticker predicate; " +
+        "with neither it streams every fund (~116 partitions — slow). weight_percent is in " +
+        "percent points (0.74 = 0.74%). Global X publishes current holdings only, so there is no " +
+        "historical as-of date.",
       "vgi.doc_md":
         "## holdings_scan\n\n" +
         "The backing scan for the **`holdings` table** — prefer the table. Hive-partitioned by " +
-        "`fund_ticker`: filter `WHERE fund_ticker = 'QYLD'` for one fund, or scan with no filter " +
-        "to stream every fund (see the example queries). `fund_ticker` is distinct from the " +
+        "`fund_ticker`. Pass one fund's ticker as the argument (`holdings_scan(fund_ticker => 'QYLD')`) for a " +
+        "single fund, or call `holdings_scan()` with no argument and let a `WHERE fund_ticker` " +
+        "predicate push in (see the example queries). `fund_ticker` is distinct from the " +
         "constituent `ticker` column.",
       "vgi.result_columns_schema": resultColumnsSchema(holdingsSchema(), HOLDINGS_SCAN_DESCS),
     },

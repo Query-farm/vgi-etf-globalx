@@ -22,7 +22,12 @@ its docs on `tags`/`comment`/`columnComments`. Two INDEPENDENT layers matter:
 `holdings`: backing `holdingsScan` MUST be **listed** (`functions: [...functions, holdingsScan]`,
 and `functions` is empty here) — an unlisted backing scan gets no `pushdown_filters` (the extension
 can't see its `filter_pushdown` capability), so the `fund_ticker` partition filter never reaches
-it. Hence a visible `holdings_scan()` is unavoidable; VGI311 is waived in `vgi-lint.toml`.
+it (verified locally: unlisted → a full 12k-row scan + post-FILTER instead of a pushed-down
+partition scan). Hence a visible `holdings_scan` is unavoidable. Rather than waive VGI311
+(parameterless-table-function), `holdings_scan` takes a genuine optional `fund_ticker` argument
+(named-only: `holdings_scan(fund_ticker => 'QYLD')`) — a real callable, not a bare zero-arg scan —
+so the rule passes with no suppression. The `holdings` TABLE still binds it with no argument and
+relies on pushdown; the argument only routes when someone calls the function directly.
 
 ## `holdings` — hive-partitioned by `fund_ticker`, CURRENT holdings only (no time travel)
 
@@ -47,9 +52,13 @@ streams every fund** (one partition per fund). Mechanics:
   (may carry an exchange suffix like "6104 JP"; blank for cash/derivative lines); `fund_ticker` is
   the fund's ticker, constant per fund. The scan tags every row with the requested fund ticker,
   upper-cased.
-- Constraints: `products` advisory PK `[ticker]` (Global X exposes no ISIN/CUSIP), `holdings`
-  `notNull [fund_ticker]`. No cross-table FK (identifier columns recur with different meanings).
-  VGI311/807/809 waived with reasons.
+- Constraints: `products` advisory PK `[ticker]` (Global X exposes no ISIN/CUSIP); `holdings` has a
+  NOT-NULL composite PK `(fund_ticker, name, sedol)` — verified unique across every fund's current
+  holdings (a preferred issuer can hold two series under one name/ticker distinguished only by
+  SEDOL, and cash/derivative lines carry no SEDOL, so the scan emits `''` (never NULL) for a blank
+  name/sedol to keep the key columns non-null). No cross-table FK (identifier columns recur with
+  different meanings) — VGI809 does not fire. `vgi-lint.toml` carries NO `ignore` list; the static
+  and `--execute --ai` gates are both clean at `fail-on: info` with nothing suppressed.
 
 ## Catalog is a Next.js RSC flight payload (NOT a JSON API)
 
@@ -152,8 +161,9 @@ Global X). CI runs this, the reusable `ts-ci.yml`, and a `vgi-lint` gate at `--f
 (currently 100/100).
 
 Typecheck must be a `bash scripts/typecheck.sh` file (not an inline package.json pipeline) —
-`bun run` uses Bun's shell, which mishandles the `grep -v node_modules` filter. Pin
-`typescript ^6.0.3` (5.x descends into SDK `.ts` source and reports external errors).
+`bun run` uses Bun's shell, which mishandles the `grep -v node_modules` filter. `typescript`
+is on `^7.0.2` (the native compiler; own-source typecheck is clean). The `scripts/typecheck.sh`
+filter drops any external SDK `.ts`-source errors regardless of the TS major.
 
 ## Gotchas / conventions
 
