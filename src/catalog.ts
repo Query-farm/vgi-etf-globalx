@@ -222,6 +222,7 @@ const SCHEMA_TAGS: Record<string, string> = {
   "vgi.example_queries": JSON.stringify([
     { description: "Ten largest Global X ETFs by net assets", sql: "SELECT ticker, fund_name, net_assets FROM globalx.main.products ORDER BY net_assets DESC LIMIT 10" },
     { description: "Top holdings of QYLD", sql: "SELECT name, ticker, weight_percent FROM globalx.main.holdings WHERE fund_ticker = 'QYLD' ORDER BY weight_percent DESC LIMIT 10" },
+    { description: "Join a fund's catalog facts to its top holdings (fund_ticker = products.ticker)", sql: "SELECT p.fund_name, p.net_assets, h.name AS holding, h.weight_percent FROM globalx.main.products p JOIN globalx.main.holdings h ON h.fund_ticker = p.ticker WHERE p.ticker = 'QYLD' ORDER BY h.weight_percent DESC LIMIT 5" },
   ]),
 };
 

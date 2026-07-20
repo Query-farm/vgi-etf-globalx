@@ -216,6 +216,14 @@ export function makeHoldingsScan(client: GlobalxClient) {
         "single fund, or call `holdings_scan()` with no argument and let a `WHERE fund_ticker` " +
         "predicate push in (see the example queries). `fund_ticker` is distinct from the " +
         "constituent `ticker` column.",
+      // Mirror the native `examples` above through the description-preserving tag carrier: the
+      // VGI extension surfaces a function's Meta.examples into duckdb_functions().examples as bare
+      // SQL strings (no descriptions), so vgi-lint (VGI515) requires the descriptions here. The
+      // loader dedups the two carriers by SQL, so keep the SQL byte-identical to `examples` above.
+      "vgi.example_queries": JSON.stringify([
+        { description: "Top 10 holdings of QYLD, passing the fund ticker as the argument", sql: "SELECT name, weight_percent FROM globalx.main.holdings_scan(fund_ticker => 'QYLD') ORDER BY weight_percent DESC LIMIT 10" },
+        { description: "Two funds at once via a pushed IN filter on the no-argument scan", sql: "SELECT fund_ticker, count(*) FROM globalx.main.holdings_scan() WHERE fund_ticker IN ('QYLD', 'COPX') GROUP BY fund_ticker" },
+      ]),
       "vgi.result_columns_schema": resultColumnsSchema(holdingsSchema(), HOLDINGS_SCAN_DESCS),
     },
   });
