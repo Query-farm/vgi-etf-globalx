@@ -13,7 +13,14 @@
 // series of `self.__next_f.push([1,"…"])` string chunks. Concatenated and JSON-unescaped, the
 // payload is a set of newline-delimited `id:json` records with a reference system ($id → another
 // record, $D… → a date, $undefined). `parseProducts` extracts the fund records and resolves the
-// references into flat rows.
+// references into flat rows. Two payload shapes are understood:
+//   • CURRENT (site redesign, Oct 2026): one `EtfDataTable` element whose props carry
+//     `rows: [{ticker, name, netAssetsValue, grossExpensesValue, hierarchyNames, …}]`, the
+//     page-level `detailsAsOf` / `performanceAsOf` dates, and `detailsByTicker[tk].keyDocuments`
+//     (fact-sheet link). It no longer publishes NAV or the 1m/3m/YTD/3y/5y/10y/since-inception
+//     returns, so those columns are NULL; `return_1y_percent` is the 1-year return at market price.
+//   • LEGACY (before the redesign): per-fund `{ETF_TICKER, FUND_DATA → {anl_perf, cum_perf}}`
+//     records. Kept as a fallback so a rollback or cached page still parses.
 //
 // HOLDINGS come from a per-fund CSV on the CDN whose filename carries the publication date
 // (there is NO date-less alias — the bare path 404s). `fetchHoldings` finds the dated URL three
@@ -77,10 +84,13 @@ function ymdToEpoch(y: number, mo0: number, d: number): number | null {
   return Math.floor(ms / 1000);
 }
 
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
 /**
  * Parse the date shapes Global X uses → epoch SECONDS at UTC midnight (or null):
- *   ISO / ISO-datetime  "2026-07-08" or "2026-07-08T00:00:00.000Z"  (flight payload)
+ *   ISO / ISO-datetime  "2026-07-08" or "2026-07-08T00:00:00.000Z"  (legacy flight payload)
  *   US slash            "07/08/2026"  (the holdings CSV "as of" line, MM/DD/YYYY)
+ *   Month name          "Oct 22, 2026" / "September 30, 2026"  (current Explore table)
  */
 export function parseDate(v: unknown): number | null {
   if (isBlank(v)) return null;
@@ -90,6 +100,11 @@ export function parseDate(v: unknown): number | null {
   if (m) return ymdToEpoch(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
   if (m) return ymdToEpoch(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
+  m = /^([A-Za-z]{3})[A-Za-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(s);
+  if (m) {
+    const mo = MONTHS.indexOf(m[1]!.toLowerCase());
+    if (mo >= 0) return ymdToEpoch(Number(m[3]), mo, Number(m[2]));
+  }
   return null;
 }
 
@@ -204,6 +219,111 @@ export function parseProducts(html: string, ticker = ""): ProductRow[] {
   const records = flightRecords(extractFlightText(html));
   if (records.size === 0) return [];
   const wantTicker = ticker.trim().toUpperCase();
+  const table = findTableProps(records);
+  if (table) return parseTableProducts(table, records, wantTicker);
+  return parseLegacyProducts(records, wantTicker);
+}
+
+/**
+ * Locate the current Explore page's `EtfDataTable` props — the object whose `rows` array holds
+ * the per-fund records (`{ticker, netAssetsValue, …}`). Only records that textually contain a
+ * `"rows":[` key are JSON-parsed. Null when the page has no such table (legacy shape).
+ */
+function findTableProps(records: Map<string, string>): Record<string, unknown> | null {
+  const isTable = (o: Record<string, unknown>): boolean =>
+    Array.isArray(o.rows) &&
+    o.rows.some(
+      (r) => r != null && typeof r === "object" && "ticker" in r && "netAssetsValue" in r,
+    );
+  const walk = (v: unknown, depth: number): Record<string, unknown> | null => {
+    if (depth > 64 || v == null || typeof v !== "object") return null;
+    if (!Array.isArray(v) && isTable(v as Record<string, unknown>)) {
+      return v as Record<string, unknown>;
+    }
+    for (const c of Array.isArray(v) ? v : Object.values(v)) {
+      const hit = walk(c, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  for (const raw of records.values()) {
+    if (!raw.includes('"rows":[') || !raw.includes('"ticker"')) continue;
+    try {
+      const hit = walk(JSON.parse(raw), 0);
+      if (hit) return hit;
+    } catch {
+      /* not JSON — skip */
+    }
+  }
+  return null;
+}
+
+/** The PDF fact-sheet URL from a `detailsByTicker[tk].keyDocuments` list (scheme-relative → https). */
+function factSheetFromDocs(docs: unknown): string | null {
+  if (!Array.isArray(docs)) return null;
+  for (const d of docs) {
+    if (!d || typeof d !== "object") continue;
+    const doc = d as Record<string, unknown>;
+    if (String(doc.name ?? "").trim().toLowerCase() !== "fact sheet") continue;
+    const url = asStr((doc.file as Record<string, unknown> | undefined)?.url);
+    if (!url) continue;
+    return url.startsWith("//") ? `https:${url}` : url;
+  }
+  return null;
+}
+
+/** Map the current Explore `EtfDataTable` rows to product rows (see the module header). */
+function parseTableProducts(
+  table: Record<string, unknown>,
+  records: Map<string, string>,
+  wantTicker: string,
+): ProductRow[] {
+  const asOfDate = parseDate(table.detailsAsOf);
+  const performanceAsOf = parseDate(table.performanceAsOf);
+  const details = (table.detailsByTicker ?? {}) as Record<string, unknown>;
+  const rows: ProductRow[] = [];
+  const seen = new Set<string>();
+  for (const r of table.rows as unknown[]) {
+    if (!r || typeof r !== "object") continue;
+    const obj = r as Record<string, unknown>;
+    const tk = asStr(obj.ticker);
+    if (!tk || seen.has(tk.toUpperCase())) continue;
+    if (wantTicker && tk.toUpperCase() !== wantTicker) continue;
+    seen.add(tk.toUpperCase());
+    const hier = Array.isArray(obj.hierarchyNames) ? obj.hierarchyNames : [];
+    const inceptionMs = asNum(obj.inceptionDateValue);
+    const detail = resolveFlight(details[tk], records) as Record<string, unknown> | undefined;
+    rows.push({
+      ticker: tk,
+      fundName: asStr(obj.name),
+      theme: asStr(hier[0]),
+      subTheme: asStr(hier[1]),
+      inceptionDate:
+        parseDate(obj.inceptionDate) ??
+        (inceptionMs == null ? null : parseDate(new Date(inceptionMs))),
+      asOfDate,
+      performanceAsOf,
+      nav: null, // not published on the current Explore page
+      netAssets: asNum(obj.netAssetsValue),
+      grossExpenseRatioPercent: asNum(obj.grossExpensesValue),
+      netExpenseRatioPercent: asNum(obj.netExpensesValue),
+      return1mPercent: null,
+      return3mPercent: null,
+      ytdReturnPercent: null,
+      // Already percent points (22.94 = 22.94%), 1-year return at market price.
+      return1yPercent: asNum(obj.oneYearReturnValue),
+      return3yPercent: null,
+      return5yPercent: null,
+      return10yPercent: null,
+      returnSinceInceptionPercent: null,
+      factSheetUrl: factSheetFromDocs(detail?.keyDocuments),
+    });
+  }
+  return rows;
+}
+
+/** Map the legacy (pre-redesign) `{ETF_TICKER, FUND_DATA}` flight records to product rows. */
+function parseLegacyProducts(records: Map<string, string>, wantTicker: string): ProductRow[] {
   const rows: ProductRow[] = [];
   const seen = new Set<string>();
   for (const raw of records.values()) {

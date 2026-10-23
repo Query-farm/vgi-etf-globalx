@@ -16,6 +16,7 @@ import {
 import {
   FakeGlobalx,
   exploreHtml,
+  exploreTableHtml,
   flightPayload,
   QYLD_FUND,
   EMBD_FUND,
@@ -28,6 +29,9 @@ test("parseDate handles ISO, ISO-datetime, and US-slash forms", () => {
   expect(parseDate("2026-07-08")).toBe(jul8);
   expect(parseDate("2026-07-08T00:00:00.000Z")).toBe(jul8);
   expect(parseDate("07/08/2026")).toBe(jul8);
+  expect(parseDate("Jul 8, 2026")).toBe(jul8);
+  expect(parseDate("July 8, 2026")).toBe(jul8);
+  expect(parseDate("Foo 8, 2026")).toBeNull();
   expect(parseDate("")).toBeNull();
   expect(parseDate("garbage")).toBeNull();
 });
@@ -92,4 +96,38 @@ test("resolveTicker canonicalizes a ticker and returns null on a miss", async ()
   const fake = new FakeGlobalx(() => HTML());
   expect(await resolveTicker(fake.get, "qyld")).toBe("QYLD");
   expect(await resolveTicker(fake.get, "ZZZZ")).toBeNull();
+});
+
+// ── current Explore shape (Oct 2026 redesign: one EtfDataTable element) ─────────
+
+const TABLE_HTML = () => exploreTableHtml([QYLD_FUND, EMBD_FUND]);
+
+test("parseProducts maps the current EtfDataTable rows to product rows", () => {
+  const rows = parseProducts(TABLE_HTML());
+  expect(rows.length).toBe(2);
+  const qyld = rows.find((r) => r.ticker === "QYLD")!;
+  expect(qyld.fundName).toBe("Nasdaq 100® Covered Call ETF"); // trailing space trimmed
+  expect(qyld.theme).toBe("Equity");
+  expect(qyld.subTheme).toBe("Income");
+  expect(qyld.netAssets).toBe(8224970185.9);
+  expect(qyld.grossExpenseRatioPercent).toBe(0.6);
+  expect(qyld.netExpenseRatioPercent).toBeNull();
+  expect(qyld.inceptionDate).toBe(Math.floor(Date.UTC(2013, 11, 11) / 1000));
+  expect(qyld.asOfDate).toBe(Math.floor(Date.UTC(2026, 6, 8) / 1000));
+  expect(qyld.performanceAsOf).toBe(Math.floor(Date.UTC(2026, 5, 30) / 1000));
+  // Already percent points on the current page (no fraction scaling).
+  expect(qyld.return1yPercent).toBeCloseTo(24.3007604, 5);
+  // Not published on the current page.
+  expect(qyld.nav).toBeNull();
+  expect(qyld.ytdReturnPercent).toBeNull();
+  expect(qyld.returnSinceInceptionPercent).toBeNull();
+  expect(qyld.factSheetUrl).toBe("https://assets.ctfassets.net/x/y/Fact-Sheet_QYLD.pdf");
+  const embd = rows.find((r) => r.ticker === "EMBD")!;
+  expect(embd.theme).toBe("Fixed Income");
+  expect(embd.netExpenseRatioPercent).toBe(0.39);
+});
+
+test("parseProducts narrows the current shape to a single ticker", () => {
+  expect(parseProducts(TABLE_HTML(), "embd").map((r) => r.ticker)).toEqual(["EMBD"]);
+  expect(parseProducts(TABLE_HTML(), "ZZZZ")).toEqual([]);
 });

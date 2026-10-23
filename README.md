@@ -117,7 +117,9 @@ Assets'`, `'Structured'`, `'Digital Assets'`), etc. Columns include `ticker`, `f
 `net_expense_ratio_percent`, cumulative / annualized return columns (`return_1m_percent`,
 `return_3m_percent`, `ytd_return_percent`, `return_1y/3y/5y/10y_percent`,
 `return_since_inception_percent`), and `fact_sheet_url`. All `*_percent` columns are in percent
-points. `net_assets` and `nav` are in USD.
+points. `net_assets` and `nav` are in USD. Since Global X's October 2026 site redesign the Explore
+page no longer publishes NAV or the 1m/3m/YTD/3y/5y/10y/since-inception returns, so those columns
+are NULL; `return_1y_percent` is the 1-year return at market price.
 
 ### holdings — a hive-partitioned table
 

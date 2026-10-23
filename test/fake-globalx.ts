@@ -137,6 +137,90 @@ export function exploreHtml(funds: FakeFund[]): string {
   );
 }
 
+// ── CURRENT Explore page (Oct 2026 redesign): one EtfDataTable element ───────────
+//
+// Mirrors the live shape: an `I[…,"EtfDataTable"]` client-reference record plus a server tree
+// record whose `$L…` element props carry `rows` (display strings + numeric `*Value` twins),
+// page-level `detailsAsOf` / `performanceAsOf`, and `detailsByTicker[tk].keyDocuments`.
+
+const usDate = (iso: string): string => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${mon[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+};
+
+export function exploreTableFlight(funds: FakeFund[]): string {
+  const rows = funds.map((fn) => ({
+    ticker: fn.ticker,
+    name: `${fn.name} `, // the live page carries trailing spaces on some names
+    netAssets: `$$${fn.netAssets.toLocaleString("en-US", { maximumFractionDigits: 0 })}`,
+    netAssetsValue: fn.netAssets,
+    oneYearReturn: `+${(fn.anl.year_1 * 100).toFixed(2)}%`,
+    oneYearReturnValue: fn.anl.year_1 * 100,
+    grossExpenses: `${fn.grossExp.toFixed(2)}%`,
+    grossExpensesValue: fn.grossExp,
+    netExpenses: fn.netExp == null ? "-" : `${fn.netExp.toFixed(2)}%`,
+    netExpensesValue: fn.netExp,
+    distributionRate: "-",
+    distributionRateValue: null,
+    rating: null,
+    ratingTooltip: null,
+    inceptionDate: usDate(fn.inception),
+    inceptionDateValue: Date.parse(`${fn.inception}T00:00:00Z`),
+    hierarchyNames: [fn.theme, fn.subTheme, "Covered Call"],
+    managementStyle: "Passive",
+    investmentGoalNames: ["Seeking Income Generation"],
+    trackRecord: "10+ years",
+    distributionFrequency: "Monthly",
+    numberOfHoldings: "102",
+    primaryExchange: "Nasdaq",
+  }));
+  const detailsByTicker = Object.fromEntries(
+    funds.map((fn) => [
+      fn.ticker,
+      {
+        ticker: fn.ticker,
+        aboutFund: "$L6e", // lazy reference with no record — must resolve to undefined, not throw
+        keyDocuments: [
+          {
+            name: "Fact Sheet",
+            fileType: "PDF",
+            file: { url: `//assets.ctfassets.net/x/y/Fact-Sheet_${fn.ticker}.pdf` },
+          },
+        ],
+      },
+    ]),
+  );
+  const props = {
+    rows,
+    detailsByTicker,
+    fundPathPrefix: "funds",
+    valueNotAvailable: "-",
+    detailsAsOf: usDate(funds[0]?.asOf ?? "2026-07-08"),
+    performanceAsOf: usDate(funds[0]?.monthEnd ?? "2026-06-30"),
+  };
+  const tree = [
+    "$",
+    "div",
+    null,
+    { className: "w-full", children: ["$", "div", null, { children: [["$", "h2", null, { children: "Find the right ETFs" }], ["$", "$L5b", null, props]] }] },
+  ];
+  return ['0:"$L1"', '5b:I[285773,["/_next/static/chunks/a.js"],"EtfDataTable"]', `4d:${JSON.stringify(tree)}`].join("\n");
+}
+
+/** Wrap the current-shape flight text into an /explore HTML page (split across two pushes). */
+export function exploreTableHtml(funds: FakeFund[]): string {
+  const flight = exploreTableFlight(funds);
+  const mid = Math.floor(flight.length / 2);
+  const push = (s: string) => `<script>self.__next_f.push([1,${JSON.stringify(s)}])</script>`;
+  return (
+    "<!doctype html><html><body><script>self.__next_f=self.__next_f||[]</script>" +
+    push(flight.slice(0, mid)) +
+    push(flight.slice(mid)) +
+    "</body></html>"
+  );
+}
+
 // ── per-fund page (carries the holdings CSV link) ────────────────────────────────
 
 export function fundPageHtml(ticker: string, ymd: string): string {
