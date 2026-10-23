@@ -167,33 +167,25 @@ const CATALOG_TAGS: Record<string, string> = {
       sql: "SELECT name, ticker, weight_percent FROM globalx.main.holdings WHERE fund_ticker = 'QYLD' ORDER BY weight_percent DESC LIMIT 5",
     },
   ]),
-  // Agent-suitability suite (catalog only). Each task carries a deterministic check_sql that
-  // asserts specific ground truth; reference_sql is deliberately omitted (live data). One task
-  // per callable surface (products, holdings, holdings_scan) satisfies VGI520.
+  // The agent-suitability suite (catalog only). The published tag carries ONLY `name` +
+  // `prompt` — the grader fields (check_sql, success_criteria) live in the private sidecar
+  // vgi-agent-tests.yaml, keyed by name, so the analyst agent never sees them (VGI416).
   "vgi.agent_test_tasks": JSON.stringify([
     {
       name: "qyld_exists",
       prompt: "Does Global X offer an ETF with the ticker QYLD, and what is it called?",
-      check_sql: "SELECT count(*) > 0 FROM globalx.main.products WHERE ticker = 'QYLD'",
-      success_criteria: "The answer confirms QYLD is the Global X Nasdaq 100 Covered Call ETF, found via the products table.",
     },
     {
       name: "qyld_expense_ratio",
       prompt: "What is the gross expense ratio of the Global X Nasdaq 100 Covered Call ETF (QYLD)?",
-      check_sql: "SELECT count(*) > 0 FROM globalx.main.products WHERE ticker = 'QYLD' AND gross_expense_ratio_percent IS NOT NULL",
-      success_criteria: "The answer reports QYLD's gross expense ratio (a small percentage) from the products table.",
     },
     {
       name: "qyld_top_holding",
       prompt: "What is the single largest holding of the Global X Nasdaq 100 Covered Call ETF (QYLD) right now?",
-      check_sql: "SELECT count(*) > 0 FROM globalx.main.holdings WHERE fund_ticker = 'QYLD'",
-      success_criteria: "The answer names QYLD's top holding by weight, obtained from the holdings table.",
     },
     {
       name: "qyld_holdings_scan",
       prompt: "Using the holdings backing scan function with the fund ticker as its argument, list a few QYLD constituents by weight.",
-      check_sql: "SELECT count(*) > 0 FROM globalx.main.holdings_scan(fund_ticker => 'QYLD')",
-      success_criteria: "The answer returns QYLD constituents via holdings_scan(fund_ticker => 'QYLD'), passing the fund ticker as the argument.",
     },
   ]),
 };

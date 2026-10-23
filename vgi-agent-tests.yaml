@@ -1,0 +1,23 @@
+# Private grader sidecar for `vgi-lint simulate` (and `lint`'s VGI520 coverage). The worker
+# publishes only task names + prompts in `vgi.agent_test_tasks` (src/catalog.ts); these
+# grader fields are keyed by that name and never sent to the analyst agent.
+#
+# Agent-suitability suite (catalog only). Each task carries a deterministic check_sql that
+# asserts specific ground truth; reference_sql is deliberately omitted (live data). One task
+# per callable surface (products, holdings, holdings_scan) satisfies VGI520.
+tasks:
+  - name: "qyld_exists"
+    check_sql: "SELECT count(*) > 0 FROM globalx.main.products WHERE ticker = 'QYLD'"
+    success_criteria: "The answer confirms QYLD is the Global X Nasdaq 100 Covered Call ETF, found via the products table."
+
+  - name: "qyld_expense_ratio"
+    check_sql: "SELECT count(*) > 0 FROM globalx.main.products WHERE ticker = 'QYLD' AND gross_expense_ratio_percent IS NOT NULL"
+    success_criteria: "The answer reports QYLD's gross expense ratio (a small percentage) from the products table."
+
+  - name: "qyld_top_holding"
+    check_sql: "SELECT count(*) > 0 FROM globalx.main.holdings WHERE fund_ticker = 'QYLD'"
+    success_criteria: "The answer names QYLD's top holding by weight, obtained from the holdings table."
+
+  - name: "qyld_holdings_scan"
+    check_sql: "SELECT count(*) > 0 FROM globalx.main.holdings_scan(fund_ticker => 'QYLD')"
+    success_criteria: "The answer returns QYLD constituents via holdings_scan(fund_ticker => 'QYLD'), passing the fund ticker as the argument."

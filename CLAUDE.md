@@ -175,7 +175,8 @@ filter drops any external SDK `.ts`-source errors regardless of the TS major.
   functions (VGI173); numeric column comments should state units (VGI131 — e.g. "per share in USD",
   "percent points"); argument docs must NOT restate the data type (VGI313); every function needs an
   agent test task (VGI520 — products/holdings/holdings_scan are covered in `catalog.ts`
-  `vgi.agent_test_tasks`).
+  `vgi.agent_test_tasks`); the tag publishes only `name` + `prompt` — grader fields
+  (`check_sql`, `success_criteria`) live in the private root sidecar `vgi-agent-tests.yaml` (VGI416).
 - Don't add a secret type; this worker is keyless by design.
 - Keep the `holdings` current-only contract: do NOT add `supportsTimeTravel` or an as-of arg.
 - Global X exposes NO ISIN/CUSIP in the catalog, so the products PK is `[ticker]`.
