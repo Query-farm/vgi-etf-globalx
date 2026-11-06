@@ -7,8 +7,11 @@
 // catalog-qualified (globalx.main.<obj>) so it binds/runs when the catalog is attached.
 
 import type { CatalogDescriptor, VgiFunction } from "@query-farm/vgi";
-import { Arguments } from "@query-farm/vgi";
+import { Arguments, constraintRecord } from "@query-farm/vgi";
 import { productsSchema, holdingsSchema, resultColumnsSchema } from "./schema.js";
+
+/** The one schema the tables live in (constraint records carry its path). */
+const SCHEMA = ["main"];
 
 const REPO = "https://github.com/Query-farm/vgi-etf-globalx";
 const ISSUES = `${REPO}/issues`;
@@ -250,8 +253,14 @@ export function makeCatalog(
             name: "products",
             function: productsScan,
             arguments: new Arguments([], new Map()),
-            // Each fund is keyed by its exchange ticker (advisory — not enforced on scan).
-            primaryKey: [["ticker"]],
+            // Each fund is keyed by its exchange ticker: the scan skips rows without a ticker and
+            // de-duplicates on it, so the key is genuinely non-null and unique.
+            constraints: [
+              constraintRecord({
+                schemaPath: SCHEMA, table: "products", id: "products.pk", kind: "PRIMARY_KEY",
+                columns: [["ticker"]], enforcement: "ENFORCED", validation: "ALL_ROWS",
+              }),
+            ],
             // The Global X US ETF lineup is ~116 funds; headroom to ~250.
             inlinedCardinality: { estimate: 116n, max: 250n },
             comment:
@@ -270,8 +279,19 @@ export function makeCatalog(
             // series under one name/ticker with distinct SEDOLs), and cash/derivative lines carry no
             // SEDOL (emitted as '') — so name is part of the key too. The scan emits '' (never NULL)
             // for a blank name/sedol so the key columns are genuinely non-null.
-            notNull: ["fund_ticker", "name", "sedol"],
-            primaryKey: [["fund_ticker", "name", "sedol"]],
+            constraints: [
+              ...["fund_ticker", "name", "sedol"].map((col) =>
+                constraintRecord({
+                  schemaPath: SCHEMA, table: "holdings", id: `holdings.${col}.not_null`,
+                  kind: "NOT_NULL", columns: [[col]], enforcement: "ENFORCED", validation: "ALL_ROWS",
+                }),
+              ),
+              constraintRecord({
+                schemaPath: SCHEMA, table: "holdings", id: "holdings.pk", kind: "PRIMARY_KEY",
+                columns: [["fund_ticker"], ["name"], ["sedol"]],
+                enforcement: "ENFORCED", validation: "ALL_ROWS",
+              }),
+            ],
             // Hive partition key: fund_ticker. A WHERE fund_ticker = … / IN (…) filter is pushed
             // down to fetch just those funds; an unfiltered scan streams every fund (all partitions).
             // Global X publishes current holdings only, so there is NO time travel.
