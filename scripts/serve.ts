@@ -22,7 +22,7 @@ const { registry, catalogInterface } = makeWorkerParts();
 serveVgiWorker({
   name: "globalx",
   doc: "Global X US ETF data: product catalog and current holdings.",
-  version: "0.1.0",
+  version: "0.2.0",
   repositoryUrl: "https://github.com/Query-farm/vgi-etf-globalx",
   serverId: "vgi-etf-globalx",
   registry,
