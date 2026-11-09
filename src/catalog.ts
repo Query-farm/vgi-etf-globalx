@@ -126,6 +126,7 @@ const HOLDINGS_TABLE_TAGS: Record<string, string> = {
 /** Catalog-level tags: docs, discovery, provenance, and the agent-test suite. */
 const CATALOG_TAGS: Record<string, string> = {
   "vgi.title": "Global X ETFs",
+  "vgi.subtitle": "Global X US ETF product facts and current fund holdings as SQL tables.",
   "vgi.doc_llm":
     "Global X US ETF data as SQL tables. Reach for it to screen the ETF lineup on key facts (net " +
     "assets, expense ratio, returns, theme), and to inspect what a fund currently holds. The " +
