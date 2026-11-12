@@ -18,7 +18,7 @@ its docs on `tags`/`comment`/`columnComments`. Two INDEPENDENT layers matter:
 - **catalog `schemas[].functions`** — the *listing* layer. Controls what shows as a callable `X()`
   function AND is where the extension discovers a scan's capabilities (e.g. `filter_pushdown`).
 
-`products`: backing `productsScan` is **registered but NOT listed** → exposed only as the table.
+`products`: backing `productsScan` is **registered but NOT declared in `functions`** → exposed only as the table (protocol 3.3 sends it as `table_only`: hidden from `duckdb_functions()`, not callable as `products()`).
 `holdings`: backing `holdingsScan` MUST be **listed** (`functions: [...functions, holdingsScan]`,
 and `functions` is empty here) — an unlisted backing scan gets no `pushdown_filters` (the extension
 can't see its `filter_pushdown` capability), so the `fund_ticker` partition filter never reaches
