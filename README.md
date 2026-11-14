@@ -145,7 +145,18 @@ column (each row's own constituent ticker; blank for cash/derivative lines). Col
 across fund types: `weight_percent`, `ticker`, `name`, `sedol`, `market_price`, `shares_held`,
 `market_value`. Rows come back **weight-descending**. `as_of_date` (DATE) is the published file's
 date — Global X publishes **current holdings only**, so there is no historical time travel. Join
-`holdings.fund_ticker` to `products.ticker` for fund-level facts.
+`holdings.fund_ticker` to `products.ticker` for fund-level facts:
+
+```sql
+-- Which Global X funds hold the most NVIDIA (in dollars), with each fund's name and sub-theme.
+-- No fund_ticker filter, so this scans every fund's holdings (a few seconds).
+SELECT h.fund_ticker, p.fund_name, p.sub_theme, h.weight_percent, h.market_value
+FROM globalx.holdings h
+JOIN globalx.products p ON p.ticker = h.fund_ticker
+WHERE h.ticker = 'NVDA'
+ORDER BY h.market_value DESC
+LIMIT 10;
+```
 
 > A backing `holdings_scan(fund_ticker => …)` table function is also exposed (it's what the table
 > scans, and it's what lets DuckDB push the `fund_ticker` filter). Call it directly for one fund —

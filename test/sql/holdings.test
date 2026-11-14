@@ -5,7 +5,7 @@
 require-env VGI_TEST_WORKER
 
 statement ok
-ATTACH 'globalx' AS gx (TYPE vgi, LOCATION '${VGI_TEST_WORKER}');
+ATTACH 'globalx' AS gx (TYPE vgi, LOCATION '{VGI_TEST_WORKER}');
 
 statement ok
 SET search_path='gx.main';
@@ -47,5 +47,27 @@ SELECT (count(*) >= 1)::INT FROM (SELECT * FROM gx.holdings LIMIT 5);
 # The backing scan function also works directly (pushdown).
 query I
 SELECT (count(*) > 50)::INT FROM gx.holdings_scan() WHERE fund_ticker = 'QYLD';
+----
+1
+
+# Every pushed filter is honored, not just the fund_ticker partition key: DuckDB drops a
+# pushed predicate from its own plan, so a constituent filter must be applied by the scan
+# (regression: `AND ticker = 'AAPL'` used to return the fund's whole portfolio).
+query I
+SELECT (count(*) = 1 AND bool_and(ticker = 'AAPL'))::INT
+FROM gx.holdings WHERE fund_ticker = 'QYLD' AND ticker = 'AAPL';
+----
+1
+
+query I
+SELECT (count(*) > 0 AND bool_and(weight_percent > 3))::INT
+FROM gx.holdings WHERE fund_ticker = 'QYLD' AND weight_percent > 3;
+----
+1
+
+# ...including when no fund_ticker filter narrows the partitions (every fund is scanned).
+query I
+SELECT (count(*) > 5 AND bool_and(ticker = 'NVDA') AND count(DISTINCT fund_ticker) = count(*))::INT
+FROM gx.holdings WHERE ticker = 'NVDA';
 ----
 1

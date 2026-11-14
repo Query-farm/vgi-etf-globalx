@@ -21,3 +21,29 @@ tasks:
   - name: "qyld_holdings_scan"
     check_sql: "SELECT count(*) > 0 FROM globalx.main.holdings_scan(fund_ticker => 'QYLD')"
     success_criteria: "The answer returns QYLD constituents via holdings_scan(fund_ticker => 'QYLD'), passing the fund ticker as the argument."
+
+  # Composed tasks (products × holdings). check_sql runs in the analyst's own session after it
+  # answers, so each prompt asks for a named temporary view with pinned columns; the grader
+  # compares that view with the same value recomputed live. A wrong answer, a missing view or
+  # wrong columns fails — the grader never passes "whatever the agent says". Answers are well
+  # separated (no near-ties) so the daily holdings refresh doesn't flip them.
+  - name: "msft_income_exposure"
+    check_sql: >-
+      WITH t AS (SELECT count(*) AS n, sum(h.market_value) AS mv
+                 FROM globalx.main.holdings h JOIN globalx.main.products p ON p.ticker = h.fund_ticker
+                 WHERE p.sub_theme = 'Income' AND h.ticker = 'MSFT')
+      SELECT count(*) = 1 AND bool_and(a.fund_count = t.n AND t.n > 0
+                                       AND abs(a.total_market_value / t.mv - 1) < 0.005)
+      FROM msft_income_exposure a, t
+    success_criteria: "The answer joins products (sub_theme = 'Income') to holdings (ticker = 'MSFT') and reports the number of funds and their summed market_value in USD."
+
+  - name: "priciest_commodity_top_holding"
+    check_sql: >-
+      WITH f AS (SELECT arg_max(ticker, gross_expense_ratio_percent) AS tk
+                 FROM globalx.main.products WHERE sub_theme = 'Commodities'),
+           t AS (SELECT arg_max(h.name, h.weight_percent) AS name, max(h.weight_percent) AS w
+                 FROM globalx.main.holdings h, f WHERE h.fund_ticker = f.tk)
+      SELECT count(*) = 1 AND bool_and(a.fund_ticker = f.tk AND upper(trim(a.holding_name)) = t.name
+                                       AND abs(a.weight_percent - t.w) < 0.01)
+      FROM priciest_commodity_top a, f, t
+    success_criteria: "The answer finds the Commodities fund with the highest gross_expense_ratio_percent in products, then reports that fund's largest holding by weight_percent from holdings."

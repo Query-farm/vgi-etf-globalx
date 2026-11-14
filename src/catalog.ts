@@ -16,6 +16,42 @@ const SCHEMA = ["main"];
 const REPO = "https://github.com/Query-farm/vgi-etf-globalx";
 const ISSUES = `${REPO}/issues`;
 
+// ── composed examples ─────────────────────────────────────────────────────────
+// Queries that combine the worker's objects (products × holdings, holdings × holdings). Each SQL
+// is defined once here and listed both in the schema-level examples and on the table that drives
+// the query (within its first five examples, which is what the vgi-lint agent simulator shows).
+
+/** products × holdings, catalog-level facts joined to one fund's top positions. */
+const FUND_TOP_HOLDINGS_EXAMPLE = {
+  description: "Join a fund's catalog facts to its top holdings (fund_ticker = products.ticker)",
+  sql: "SELECT p.fund_name, p.net_assets, h.name AS holding, h.weight_percent FROM globalx.main.products p JOIN globalx.main.holdings h ON h.fund_ticker = p.ticker WHERE p.ticker = 'QYLD' ORDER BY h.weight_percent DESC LIMIT 5",
+};
+
+/** holdings × products: who holds a stock, with each fund's name and sub-theme. */
+const STOCK_HOLDERS_EXAMPLE = {
+  description:
+    "The ten Global X ETFs with the largest dollar position in NVIDIA, with each fund's name and " +
+    "sub-theme from products (scans every fund's holdings, so it takes a few seconds)",
+  sql: "SELECT h.fund_ticker, p.fund_name, p.sub_theme, h.weight_percent, h.market_value FROM globalx.main.holdings h JOIN globalx.main.products p ON p.ticker = h.fund_ticker WHERE h.ticker = 'NVDA' ORDER BY h.market_value DESC LIMIT 10",
+};
+
+/** holdings × holdings: classic portfolio overlap of two funds. */
+const FUND_OVERLAP_EXAMPLE = {
+  description:
+    "Portfolio overlap of QYLD (Nasdaq-100) and XYLD (S&P 500): how many constituents both hold " +
+    "(matched on SEDOL) and the overlap weight, the sum of the smaller weight of each shared holding",
+  sql: "SELECT count(*) AS shared_constituents, round(sum(least(q.weight_percent, x.weight_percent)), 2) AS overlap_weight_percent FROM globalx.main.holdings q JOIN globalx.main.holdings x ON x.sedol = q.sedol WHERE q.fund_ticker = 'QYLD' AND x.fund_ticker = 'XYLD' AND q.sedol <> ''",
+};
+
+/** products → holdings: screen a sub-theme, then measure each fund's concentration. */
+const THEMATIC_CONCENTRATION_EXAMPLE = {
+  description:
+    "The most concentrated Thematic ETFs: weight in each fund's top 10 ticker-bearing holdings " +
+    "(cash and other untickered lines excluded), its number of such holdings, and its gross " +
+    "expense ratio (scans every fund's holdings, so it takes a few seconds)",
+  sql: "WITH ranked AS (SELECT fund_ticker, weight_percent, row_number() OVER (PARTITION BY fund_ticker ORDER BY weight_percent DESC) AS rnk FROM globalx.main.holdings WHERE ticker IS NOT NULL) SELECT p.ticker, p.fund_name, p.gross_expense_ratio_percent, count(*) AS constituents, round(sum(r.weight_percent) FILTER (WHERE r.rnk <= 10), 2) AS top10_weight_percent FROM globalx.main.products p JOIN ranked r ON r.fund_ticker = p.ticker WHERE p.sub_theme = 'Thematic' GROUP BY ALL ORDER BY top10_weight_percent DESC LIMIT 10",
+};
+
 /** Per-column comments for the products table (surface as Arrow field metadata). */
 const PRODUCTS_COLUMN_COMMENTS: Record<string, string> = {
   ticker: "Exchange ticker (e.g. QYLD).",
@@ -70,6 +106,8 @@ const PRODUCTS_TABLE_TAGS: Record<string, string> = {
     { description: "Ten largest Global X ETFs by net assets", sql: "SELECT ticker, fund_name, net_assets FROM globalx.main.products ORDER BY net_assets DESC LIMIT 10" },
     { description: "Cheapest funds by gross expense ratio", sql: "SELECT ticker, fund_name, gross_expense_ratio_percent FROM globalx.main.products ORDER BY gross_expense_ratio_percent LIMIT 10" },
     { description: "Look up a single fund by ticker", sql: "SELECT ticker, fund_name, gross_expense_ratio_percent FROM globalx.main.products WHERE ticker = 'QYLD'" },
+    FUND_TOP_HOLDINGS_EXAMPLE,
+    THEMATIC_CONCENTRATION_EXAMPLE,
   ]),
   "vgi.result_columns_schema": resultColumnsSchema(productsSchema(), PRODUCTS_COLUMN_COMMENTS),
 };
@@ -120,6 +158,8 @@ const HOLDINGS_TABLE_TAGS: Record<string, string> = {
     { description: "Top 10 current holdings of QYLD", sql: "SELECT name, ticker, weight_percent FROM globalx.main.holdings WHERE fund_ticker = 'QYLD' ORDER BY weight_percent DESC LIMIT 10" },
     { description: "The largest positions of the Copper Miners ETF", sql: "SELECT name, weight_percent, market_value FROM globalx.main.holdings WHERE fund_ticker = 'COPX' ORDER BY weight_percent DESC LIMIT 10" },
     { description: "Two funds at once (partition fan-out)", sql: "SELECT fund_ticker, name, weight_percent FROM globalx.main.holdings WHERE fund_ticker IN ('QYLD', 'COPX')" },
+    STOCK_HOLDERS_EXAMPLE,
+    FUND_OVERLAP_EXAMPLE,
   ]),
 };
 
@@ -191,6 +231,24 @@ const CATALOG_TAGS: Record<string, string> = {
       name: "qyld_holdings_scan",
       prompt: "Using the holdings backing scan function with the fund ticker as its argument, list a few QYLD constituents by weight.",
     },
+    // Composed tasks (products × holdings). Graded by check_sql over the view the analyst saves,
+    // recomputed live (see vgi-agent-tests.yaml), so a wrong answer fails.
+    {
+      name: "msft_income_exposure",
+      prompt:
+        "How many US dollars do Global X's Income sub-theme ETFs hold in Microsoft (ticker MSFT) " +
+        "in total, and across how many of those funds? Save the answer as a temporary view named " +
+        "msft_income_exposure with one row and columns fund_count (BIGINT) and total_market_value " +
+        "(DOUBLE, in USD).",
+    },
+    {
+      name: "priciest_commodity_top_holding",
+      prompt:
+        "Which Global X Commodities sub-theme ETF has the highest gross expense ratio, and what is " +
+        "its single largest holding by weight? Save the answer as a temporary view named " +
+        "priciest_commodity_top with one row and columns fund_ticker (VARCHAR), holding_name " +
+        "(VARCHAR, the holding's name as listed in the holdings) and weight_percent (DOUBLE).",
+    },
   ]),
 };
 
@@ -218,7 +276,10 @@ const SCHEMA_TAGS: Record<string, string> = {
   "vgi.example_queries": JSON.stringify([
     { description: "Ten largest Global X ETFs by net assets", sql: "SELECT ticker, fund_name, net_assets FROM globalx.main.products ORDER BY net_assets DESC LIMIT 10" },
     { description: "Top holdings of QYLD", sql: "SELECT name, ticker, weight_percent FROM globalx.main.holdings WHERE fund_ticker = 'QYLD' ORDER BY weight_percent DESC LIMIT 10" },
-    { description: "Join a fund's catalog facts to its top holdings (fund_ticker = products.ticker)", sql: "SELECT p.fund_name, p.net_assets, h.name AS holding, h.weight_percent FROM globalx.main.products p JOIN globalx.main.holdings h ON h.fund_ticker = p.ticker WHERE p.ticker = 'QYLD' ORDER BY h.weight_percent DESC LIMIT 5" },
+    FUND_TOP_HOLDINGS_EXAMPLE,
+    STOCK_HOLDERS_EXAMPLE,
+    FUND_OVERLAP_EXAMPLE,
+    THEMATIC_CONCENTRATION_EXAMPLE,
   ]),
 };
 

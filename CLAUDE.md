@@ -48,6 +48,9 @@ streams every fund** (one partition per fund). Mechanics:
   discovery strategies miss); `process()` skips it and pops the next, so an all-funds scan never
   fails on one missing fund.
 - **`filterPushdown: true`** + LISTED → the extension pushes the `fund_ticker` filter into the scan.
+  DuckDB DROPS every pushed predicate from its own plan, so `process()` must apply ALL of them
+  (`applyPushedFilters`), not only fund_ticker — otherwise `WHERE ticker = 'NVDA'` returns every
+  holding of every fund (fixed 2026-11; regression tests in `test/pushdown.test.ts` + `test/sql/holdings.test`).
 - **`fund_ticker` is a SEPARATE column from `ticker`** — `ticker` is the CONSTITUENT's own ticker
   (may carry an exchange suffix like "6104 JP"; blank for cash/derivative lines); `fund_ticker` is
   the fund's ticker, constant per fund. The scan tags every row with the requested fund ticker,
@@ -150,7 +153,7 @@ the driver has no `dateArgToEpoch`; `parseDate` handles ISO/ISO-datetime (flight
 
 ```bash
 bun install
-bun test            # 32 tests: SDK-free driver + Arrow batch builders + live HTTP-transport E2E
+bun test            # 37 tests: SDK-free driver + Arrow batch builders + live HTTP-transport E2E
 bun run typecheck   # own-source only; scripts/typecheck.sh filters node_modules errors
 ./run_tests.sh      # haybarn SQLLogic E2E: worker under real DuckDB + community vgi ext
 ```

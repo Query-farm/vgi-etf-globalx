@@ -10,6 +10,8 @@ import {
   deserializeFilters,
   DEFAULT_MAX_WORKERS,
   type OutputCollector,
+  type PushdownFilters,
+  type VgiBatch,
 } from "@query-farm/vgi";
 import { Schema, Field, Utf8 } from "@query-farm/apache-arrow";
 import { fetchProducts, fetchHoldings } from "./globalx.js";
@@ -35,6 +37,16 @@ const HOLDINGS_SCAN_DESCS: Record<string, string> = {
   shares_held: "Number of shares / units held.",
   market_value: "Market value of the position, in USD.",
 };
+
+/**
+ * Keep only the rows of `batch` that satisfy every filter DuckDB pushed into a scan. A pushed
+ * filter is removed from DuckDB's own plan, so a filter-pushdown scan must apply all of them
+ * (not only the fund_ticker partition key it uses to pick funds) or the query returns
+ * unfiltered rows — e.g. `WHERE ticker = 'NVDA'` would return every fund's whole portfolio.
+ */
+export function applyPushedFilters(filters: PushdownFilters | undefined, batch: VgiBatch): VgiBatch {
+  return filters ? filters.apply(batch) : batch;
+}
 
 interface DoneState {
   done: boolean;
@@ -192,7 +204,12 @@ export function makeHoldingsScan(client: GlobalxClient) {
         const fund = decodeFund(item);
         const rows = await fetchHoldings(client.get, fund.ticker, { asOfHint: fund.asOf });
         if (rows.length === 0) continue;
-        out.emit(holdingsBatch(schema, rows), partitionValues(fund.ticker));
+        // Honor EVERY pushed filter, not just fund_ticker: DuckDB drops the predicates it pushes
+        // into the scan from its own plan, so `AND ticker = 'NVDA'` (or any other column filter)
+        // would otherwise silently return the whole fund.
+        const batch = applyPushedFilters(p.pushdownFilters, holdingsBatch(schema, rows));
+        if (batch.numRows === 0) continue;
+        out.emit(batch, partitionValues(fund.ticker));
         return;
       }
     },
