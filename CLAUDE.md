@@ -52,7 +52,7 @@ streams every fund** (one partition per fund). Mechanics:
   (`applyPushedFilters`), not only fund_ticker — otherwise `WHERE ticker = 'NVDA'` returns every
   holding of every fund (fixed 2026-11; regression tests in `test/pushdown.test.ts` + `test/sql/holdings.test`).
 - **`fund_ticker` is a SEPARATE column from `ticker`** — `ticker` is the CONSTITUENT's own ticker
-  (may carry an exchange suffix like "6104 JP"; blank for cash/derivative lines); `fund_ticker` is
+  (may carry an exchange suffix like "6104 JP"; NULL for cash/derivative lines); `fund_ticker` is
   the fund's ticker, constant per fund. The scan tags every row with the requested fund ticker,
   upper-cased.
 - Constraints: `products` advisory PK `[ticker]` (Global X exposes no ISIN/CUSIP); `holdings` has a

@@ -447,7 +447,7 @@ export interface HoldingRow {
   fundTicker: string | null;
   asOfDate: number | null;
   weightPercent: number | null;
-  /** Constituent ticker (may carry an exchange suffix like "6104 JP"; blank for cash/derivative lines). */
+  /** Constituent ticker (may carry an exchange suffix like "6104 JP"; NULL for cash/derivative lines). */
   ticker: string | null;
   name: string | null;
   sedol: string | null;

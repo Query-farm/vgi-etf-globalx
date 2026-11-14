@@ -117,7 +117,7 @@ const HOLDINGS_COLUMN_COMMENTS: Record<string, string> = {
   fund_ticker: "The fund's ticker (e.g. QYLD) — the hive partition key; constant for every row of a fund. Filter on it to pick funds; omit to stream all.",
   as_of_date: "Holdings as-of date (the published file's own date; current holdings only).",
   weight_percent: "Percent of the fund's net assets, in percent points (0.74 = 0.74%; weights sum to ~100).",
-  ticker: "Constituent ticker (may carry an exchange suffix like '6104 JP'; blank for cash/derivative lines).",
+  ticker: "Constituent ticker (may carry an exchange suffix like '6104 JP'; NULL for cash/derivative lines).",
   name: "Constituent / issue name. Part of the (fund_ticker, name, sedol) primary key; never blank.",
   sedol: "Constituent SEDOL identifier; empty string for cash/derivative lines that carry none. Part of the (fund_ticker, name, sedol) primary key.",
   market_price: "Market price per unit of the constituent, in USD.",

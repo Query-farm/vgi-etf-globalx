@@ -141,7 +141,7 @@ WHERE fund_ticker IN ('QYLD', 'COPX');
 ```
 
 `fund_ticker` is the **fund's** ticker and the hive partition key — distinct from the `ticker`
-column (each row's own constituent ticker; blank for cash/derivative lines). Columns are the same
+column (each row's own constituent ticker; NULL for cash/derivative lines). Columns are the same
 across fund types: `weight_percent`, `ticker`, `name`, `sedol`, `market_price`, `shares_held`,
 `market_value`. Rows come back **weight-descending**. `as_of_date` (DATE) is the published file's
 date — Global X publishes **current holdings only**, so there is no historical time travel. Join

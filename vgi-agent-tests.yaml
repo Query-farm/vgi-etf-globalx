@@ -43,7 +43,7 @@ tasks:
                  FROM globalx.main.products WHERE sub_theme = 'Commodities'),
            t AS (SELECT arg_max(h.name, h.weight_percent) AS name, max(h.weight_percent) AS w
                  FROM globalx.main.holdings h, f WHERE h.fund_ticker = f.tk)
-      SELECT count(*) = 1 AND bool_and(a.fund_ticker = f.tk AND upper(trim(a.holding_name)) = t.name
+      SELECT count(*) = 1 AND bool_and(a.fund_ticker = f.tk AND upper(trim(a.holding_name)) = upper(trim(t.name))
                                        AND abs(a.weight_percent - t.w) < 0.01)
       FROM priciest_commodity_top a, f, t
     success_criteria: "The answer finds the Commodities fund with the highest gross_expense_ratio_percent in products, then reports that fund's largest holding by weight_percent from holdings."

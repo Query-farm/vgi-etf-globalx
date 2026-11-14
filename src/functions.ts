@@ -30,7 +30,7 @@ const HOLDINGS_SCAN_DESCS: Record<string, string> = {
   fund_ticker: "The fund's ticker — the partition filter.",
   as_of_date: "The holdings as-of date (the published file's own date).",
   weight_percent: "Percent of the fund's net assets, in percent points (0.74 = 0.74%).",
-  ticker: "Constituent ticker (may carry an exchange suffix; blank for cash/derivative lines).",
+  ticker: "Constituent ticker (may carry an exchange suffix; NULL for cash/derivative lines).",
   name: "Constituent / issue name (never blank; part of the row's identity).",
   sedol: "Constituent SEDOL; empty string for cash/derivative lines that carry none.",
   market_price: "Market price per unit of the constituent, in USD.",
