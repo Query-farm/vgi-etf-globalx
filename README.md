@@ -229,3 +229,7 @@ Management Company LLC / Mirae Asset.
 ## License
 
 MIT — Copyright 2026 Query Farm LLC · https://query.farm
+
+## Executed notebook
+
+[Compare holdings count and positive-weight concentration](notebooks/README.md) with current Global X files and a portable published worker.
