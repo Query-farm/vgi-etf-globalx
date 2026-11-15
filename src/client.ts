@@ -12,6 +12,12 @@
 // across queries in a long-lived stdio/HTTP process). Fund pages and holdings CSVs always go
 // live. The in-flight Promise is cached (not only the resolved value) so concurrent first
 // requests coalesce into one fetch; a failed fetch is evicted so the next call retries.
+//
+// RATE LIMITS: globalxetfs.com answers 429 (and occasionally 503) to bursts — notably from shared
+// cloud/CI egress IPs. Those two statuses are retried with exponential backoff (honoring a
+// Retry-After header, in seconds or as an HTTP date, capped at `maxRetryDelayMs`) for at most
+// `maxAttempts` attempts in total; any other non-2xx fails at once. The final error keeps the
+// "HTTP <status>" text so callers can tell a rate limit from a real failure.
 
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
@@ -32,6 +38,31 @@ export interface GlobalxClientOptions {
   catalogCacheMs?: number;
   /** Injectable clock (ms since epoch) — for tests. Defaults to Date.now. */
   now?: () => number;
+  /** Total attempts per request when Global X answers 429/503 (default 4; 1 disables retry). */
+  maxAttempts?: number;
+  /** First backoff delay in ms, doubled per retry (default 1000). */
+  retryBaseMs?: number;
+  /** Upper bound on any single wait, including a server-sent Retry-After (default 15000). */
+  maxRetryDelayMs?: number;
+  /** Injectable sleep — for tests. Defaults to a setTimeout promise. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** HTTP statuses that mean "try again later" rather than "this request is wrong". */
+export const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 503]);
+
+/**
+ * Parse a Retry-After header value into a delay in ms: either delta-seconds ("30") or an
+ * HTTP date. Returns null when absent or unparseable. A date in the past yields 0.
+ */
+export function parseRetryAfter(value: string | null, nowMs: number = Date.now()): number | null {
+  if (value == null) return null;
+  const v = value.trim();
+  if (v === "") return null;
+  if (/^\d+$/.test(v)) return Number(v) * 1000;
+  const at = Date.parse(v);
+  if (Number.isNaN(at)) return null;
+  return Math.max(0, at - nowMs);
 }
 
 /**
@@ -45,15 +76,26 @@ export function makeGlobalxClient(
 ): GlobalxClient {
   const ttl = opts.catalogCacheMs ?? CATALOG_CACHE_MS;
   const now = opts.now ?? (() => Date.now());
+  const maxAttempts = Math.max(1, opts.maxAttempts ?? 4);
+  const baseMs = opts.retryBaseMs ?? 1000;
+  const capMs = opts.maxRetryDelayMs ?? 15_000;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   let catalog: { at: number; value: Promise<string> } | null = null;
 
   const rawGet = async (url: string): Promise<string> => {
-    const res = await fetchImpl(url, { headers: { "User-Agent": UA } });
-    if (!res.ok) {
+    for (let attempt = 1; ; attempt++) {
+      const res = await fetchImpl(url, { headers: { "User-Agent": UA } });
+      if (res.ok) return res.text();
       const body = await res.text().catch(() => "");
-      throw new Error(`globalx: HTTP ${res.status} for ${url} — ${body.slice(0, 200)}`);
+      if (RETRYABLE_STATUSES.has(res.status) && attempt < maxAttempts) {
+        const hinted = parseRetryAfter(res.headers?.get("retry-after") ?? null);
+        const backoff = baseMs * 2 ** (attempt - 1);
+        await sleep(Math.min(capMs, hinted ?? backoff));
+        continue;
+      }
+      const tries = attempt > 1 ? ` after ${attempt} attempts` : "";
+      throw new Error(`globalx: HTTP ${res.status} for ${url}${tries} — ${body.slice(0, 200)}`);
     }
-    return res.text();
   };
 
   const get = async (url: string): Promise<string> => {

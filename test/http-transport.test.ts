@@ -17,6 +17,12 @@
 //
 // The final scan hits Global X live (like the haybarn live-invariant asserts) — fine for an egress
 // connector. Schema columns are deterministic; only row content is live.
+//
+// RATE LIMIT: globalxetfs.com rate-limits shared CI egress (GitHub runners get HTTP 429). The
+// client already retries 429/503 with backoff; if Global X STILL answers 429 after those retries,
+// the live test is reported as SKIPPED (with the reason printed), not failed — a rate limit says
+// nothing about the worker. Any other failure (including other HTTP errors) still fails the test.
+// The probe warms the shared client's 24 h Explore cache, so the scan itself makes no new request.
 
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { createVgiFetch } from "@query-farm/vgi/worker-cf";
@@ -25,6 +31,7 @@ import { httpConnect } from "@query-farm/vgi-rpc";
 import { makeProductsScan, makeHoldingsScan } from "../src/functions.js";
 import { makeCatalog } from "../src/catalog.js";
 import { makeGlobalxClient } from "../src/client.js";
+import { EXPLORE_URL } from "../src/globalx.js";
 import pkg from "../package.json" with { type: "json" };
 
 const PREFIX = "/vgi";
@@ -34,8 +41,25 @@ const SIGNING_KEY = new Uint8Array(32).fill(7);
 let server: ReturnType<typeof Bun.serve>;
 let baseUrl: string;
 
+const client = makeGlobalxClient();
+
+// Probe Global X once, up front (top-level await, so the skip decision exists at registration).
+// Only a rate limit is a skip; any other probe error is kept and re-thrown by the live test (so it
+// fails there, without taking down the network-free tests in this file).
+let liveSkipReason: string | null = null;
+let liveProbeError: unknown = null;
+try {
+  await client.get(EXPLORE_URL);
+} catch (e) {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (!/HTTP 429\b/.test(msg)) liveProbeError = e;
+  else liveSkipReason = `Global X rate-limited this host (HTTP 429 from ${EXPLORE_URL} after retries)`;
+}
+if (liveSkipReason) {
+  console.warn(`SKIP products table scan round-trips over HTTP (live): ${liveSkipReason}`);
+}
+
 beforeAll(() => {
-  const client = makeGlobalxClient();
   const functions: never[] = [];
   const productsScan = makeProductsScan(client);
   const holdingsScan = makeHoldingsScan(client);
@@ -92,7 +116,8 @@ test("the products/holdings tables and holdings_scan are exposed over HTTP", asy
   }
 });
 
-test("products table scan round-trips over HTTP (live)", async () => {
+test.skipIf(liveSkipReason !== null)("products table scan round-trips over HTTP (live)", async () => {
+  if (liveProbeError) throw liveProbeError;
   const rpc = httpConnect(baseUrl, { prefix: PREFIX });
   try {
     const client = new VgiClient(rpc);
