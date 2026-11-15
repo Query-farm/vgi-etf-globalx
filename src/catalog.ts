@@ -172,13 +172,18 @@ const CATALOG_TAGS: Record<string, string> = {
     "assets, expense ratio, returns, theme), and to inspect what a fund currently holds. The " +
     "central concept is the fund, identified by its exchange ticker (e.g. QYLD); start from the " +
     "catalog to find that key, then drill into a specific fund's holdings. Data is Global X's " +
-    "public fund feed: best-effort, for informational use.",
+    "public fund feed: best-effort, for informational use." +
+    " Upstream source: https://www.globalxetfs.com/explore.",
   "vgi.doc_md":
     "## Global X ETFs\n\n" +
     "Global X US ETF data, exposed as DuckDB tables.\n\n" +
     "The **fund** is the unit of the data and is keyed by an exchange `ticker` (e.g. `QYLD`) — " +
     "begin at the catalog to discover that key, then drill into a fund's holdings. Holdings are " +
     "the current published portfolio (Global X does not publish historical holdings).\n\n" +
+    "### Sources\n\n" +
+    "- [Global X ETF explorer](https://www.globalxetfs.com/explore) — the fund lineup the catalog is read from.\n" +
+    "- [Example fund page (QYLD)](https://www.globalxetfs.com/funds/qyld) — a per-fund page with the facts and holdings exposed here.\n" +
+    "\n" +
     "Data is provided for informational use; review Global X's terms before redistribution.",
   "vgi.keywords": JSON.stringify([
     "ETF",
