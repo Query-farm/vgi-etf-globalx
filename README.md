@@ -35,7 +35,7 @@ Every [GitHub release](https://github.com/Query-farm/vgi-etf-globalx/releases) s
 INSTALL vgi FROM community;
 LOAD vgi;
 
-ATTACH 'globalx' AS globalx (TYPE vgi, LOCATION 'github-auto://Query-farm/vgi-etf-globalx@v0.4.2');
+ATTACH 'globalx' AS globalx (TYPE vgi, LOCATION 'github-auto://Query-farm/vgi-etf-globalx@v0.4.3');
 
 -- The largest Global X ETFs by net assets
 SELECT ticker, fund_name, net_assets FROM globalx.main.products ORDER BY net_assets DESC LIMIT 5;
@@ -44,7 +44,7 @@ SELECT ticker, fund_name, net_assets FROM globalx.main.products ORDER BY net_ass
 SELECT name, ticker, weight_percent FROM globalx.main.holdings WHERE fund_ticker = 'QYLD' ORDER BY weight_percent DESC LIMIT 5;
 ```
 
-Prebuilt binaries cover macOS (Apple silicon), Linux (x86-64 and arm64). `github-auto://` needs an explicit release tag; change `@v0.4.2` to move to a newer release.
+Prebuilt binaries cover macOS (Apple silicon), Linux (x86-64 and arm64). `github-auto://` needs an explicit release tag; change `@v0.4.3` to move to a newer release.
 
 ### Other ways to run it
 
