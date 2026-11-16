@@ -5,9 +5,11 @@ WORKER          := $(CURDIR)/bin/vgi-etf-globalx-worker
 TOOLS           := $(CURDIR)/.tools
 HAYBARN_UNITTEST := $(TOOLS)/bin/haybarn-unittest
 TRANSPORT       ?= stdio
+# *_live.test hit Global X and run only with GLOBALX_LIVE=1 (make test-sql-live).
+EXPECTED_SKIP_REASONS ?= require-env GLOBALX_LIVE
 
 .DEFAULT_GOAL := help
-.PHONY: help build tools typecheck test-unit test-sql test-sql-all test check
+.PHONY: help build tools typecheck test-unit test-sql test-sql-all test-sql-live test check
 
 help: ## List the targets
 	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  %-14s %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -25,12 +27,15 @@ test-unit: build ## Unit tests (bun test)
 	bun test
 
 test-sql: build tools ## SQL tests through DuckDB: make test-sql TRANSPORT=stdio|launch|http
-	WORKER=$(WORKER) HAYBARN_UNITTEST=$(HAYBARN_UNITTEST) TRANSPORT=$(TRANSPORT) ci/run-integration.sh
+	WORKER=$(WORKER) HAYBARN_UNITTEST=$(HAYBARN_UNITTEST) TRANSPORT=$(TRANSPORT) EXPECTED_SKIP_REASONS="$(EXPECTED_SKIP_REASONS)" ci/run-integration.sh
 
 test-sql-all: ## SQL tests over every transport
 	$(MAKE) test-sql TRANSPORT=stdio
 	$(MAKE) test-sql TRANSPORT=launch
 	$(MAKE) test-sql TRANSPORT=http
+
+test-sql-live: ## SQL tests including the live Global X invariants (stdio)
+	GLOBALX_LIVE=1 $(MAKE) test-sql TRANSPORT=stdio
 
 test: test-unit test-sql ## Unit + SQL tests
 

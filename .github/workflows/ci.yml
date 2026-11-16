@@ -8,6 +8,9 @@ on:
     branches: [main]
     paths-ignore: ['README.md']
   workflow_dispatch:
+  # Daily run of the live Global X invariants (the `live` job); push/PR CI stays offline.
+  schedule:
+    - cron: '17 6 * * *'
   # Allow release.yml to run this exact suite as a gating `uses:` job before it
   # publishes any binaries.
   workflow_call:
@@ -33,8 +36,8 @@ jobs:
 
   # SQLLogic (haybarn) E2E: test/sql/ through the published haybarn-unittest runner and
   # the signed community vgi extension, over every transport (ci/run-integration.sh, as in
-  # the vgi-starter template). Bind-time schema asserts are deterministic; the
-  # live-invariant asserts hit Global X (an egress connector — network is expected).
+  # the vgi-starter template). Offline: bind-time schema asserts
+  # only; the live-invariant files (require-env GLOBALX_LIVE) run in the `live` job.
   e2e:
     name: SQLLogic e2e (haybarn, ${{ matrix.transport }})
     runs-on: ubuntu-latest
@@ -58,6 +61,33 @@ jobs:
           WORKER: ${{ github.workspace }}/bin/vgi-etf-globalx-worker
           HAYBARN_UNITTEST: ${{ github.workspace }}/.tools/bin/haybarn-unittest
           TRANSPORT: ${{ matrix.transport }}
+          # The *_live.test files need GLOBALX_LIVE (the `live` job); here they skip.
+          EXPECTED_SKIP_REASONS: "require-env GLOBALX_LIVE"
+        run: ci/run-integration.sh
+
+  # Live invariants against Global X (rate-limits shared runner IPs at times), kept out
+  # of push/PR CI so it stays deterministic: daily schedule or a manual dispatch only.
+  live:
+    name: SQLLogic live (Global X)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: astral-sh/setup-uv@v6
+      - name: Install worker dependencies
+        run: bun install --frozen-lockfile
+      - name: Install the SQL test runner
+        run: |
+          uv venv .tools
+          uv pip install -p .tools "haybarn-unittest==${HAYBARN_VERSION}"
+      - name: Run test/sql including the live invariants
+        env:
+          WORKER: ${{ github.workspace }}/bin/vgi-etf-globalx-worker
+          HAYBARN_UNITTEST: ${{ github.workspace }}/.tools/bin/haybarn-unittest
+          TRANSPORT: stdio
+          GLOBALX_LIVE: "1"
         run: ci/run-integration.sh
 
   # Metadata-quality gate (vgi-lint): scores the worker's catalog/schema/function docs,

@@ -1,5 +1,5 @@
 # name: test/sql/products.test
-# description: globalx.products — base table: typed schema (network-free) + live catalog invariants.
+# description: globalx.products — base table: typed schema (network-free); live invariants are in products_live.test.
 # group: [sql]
 
 require-env VGI_TEST_WORKER
@@ -32,23 +32,3 @@ query T
 SELECT column_type FROM (DESCRIBE SELECT * FROM gx.products) WHERE column_name = 'gross_expense_ratio_percent';
 ----
 DOUBLE
-
-# --- Live invariants: these hit Global X. Assert shape, not exact (moving) values. ---
-
-# The catalog has many funds; filter with WHERE.
-query I
-SELECT (count(*) > 50)::INT FROM gx.products;
-----
-1
-
-# QYLD (Nasdaq 100 Covered Call ETF) is present with a non-negative gross expense ratio.
-query I
-SELECT (count(*) = 1)::INT FROM gx.products WHERE ticker = 'QYLD' AND gross_expense_ratio_percent >= 0;
-----
-1
-
-# Theme is populated for the lineup (from the Explore flight payload).
-query I
-SELECT (count(DISTINCT theme) >= 1)::INT FROM gx.products WHERE theme IS NOT NULL;
-----
-1
