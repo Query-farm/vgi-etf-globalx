@@ -155,11 +155,12 @@ the driver has no `dateArgToEpoch`; `parseDate` handles ISO/ISO-datetime (flight
 bun install
 bun test            # 37 tests: SDK-free driver + Arrow batch builders + live HTTP-transport E2E
 bun run typecheck   # own-source only; scripts/typecheck.sh filters node_modules errors
-./run_tests.sh      # haybarn SQLLogic E2E: worker under real DuckDB + community vgi ext
+./run_tests.sh      # = make test-sql-all; haybarn SQLLogic E2E over stdio/launch/http: worker under real DuckDB + community vgi ext
 ```
 
-`run_tests.sh` sets `VGI_TEST_WORKER=bin/vgi-etf-globalx-worker` + `VGI_WORKER_CATALOG_NAME=globalx`
-and runs `test/sql/*.test` (DESCRIBE-based schema asserts + a few live-invariant asserts that hit
+`run_tests.sh` (= `make test-sql-all`) runs `test/sql/*.test` through
+`ci/run-integration.sh` over stdio, launch and http, with `VGI_TEST_WORKER` set to
+`bin/vgi-etf-globalx-worker` (or its `launch:` / HTTP location) (DESCRIBE-based schema asserts + a few live-invariant asserts that hit
 Global X). CI runs this, the reusable `ts-ci.yml`, and a `vgi-lint` gate at `--fail-on info`
 (currently 100/100).
 
